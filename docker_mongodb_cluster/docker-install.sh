@@ -1,5 +1,6 @@
 #!/bin/sh
 
+#install docker
 #https://docs.docker.com/installation/ubuntulinux/
 
 sudo apt-get update
