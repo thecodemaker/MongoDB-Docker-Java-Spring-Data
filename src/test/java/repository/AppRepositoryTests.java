@@ -7,10 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.*;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations = "classpath:/spring/app-context.xml")
@@ -21,7 +19,7 @@ public class AppRepositoryTests {
 
     @Test
     public void testSetup() throws Exception {
-        assertThat(repository,is(notNullValue()));
+        assertThat(repository, is(notNullValue()));
     }
 
     @Test

@@ -8,4 +8,6 @@
 
     <import resource="mongo-configuration.xml"/>
 
+    <context:component-scan base-package="app.service" />
+
 </beans>

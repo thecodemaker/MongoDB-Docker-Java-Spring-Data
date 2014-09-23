@@ -4,8 +4,11 @@ import app.domain.AppDomain;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
 
 import java.util.List;
+
+import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 public class AppRepositoryImpl implements AppRepositoryCustom<AppDomain> {
 
@@ -19,11 +22,11 @@ public class AppRepositoryImpl implements AppRepositoryCustom<AppDomain> {
 
     @Override
     public List<AppDomain> findOnPrimary() {
-        return mongoTemplateReadFromPrimary.findAll(AppDomain.class);
+        return mongoTemplateReadFromPrimary.find(new Query(where("read preference").is("primary")),AppDomain.class);
     }
 
     @Override
     public List<AppDomain> findOnSecondary() {
-        return mongoTemplateReadFromSecondary.findAll(AppDomain.class);
+        return mongoTemplateReadFromSecondary.find(new Query(where("read preference").is("secondary")),AppDomain.class);
     }
 }
