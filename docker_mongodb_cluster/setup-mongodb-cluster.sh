@@ -1,8 +1,7 @@
 #!/bin/bash
 
-#https://sebastianvoss.com/docker-mongodb-sharded-cluster.html
-
 #create docker images
+#execute these lines from command line
 sudo docker build -t dev24/mongodb mongod
 sudo docker build -t dev24/mongos mongos
 
@@ -79,21 +78,17 @@ CONTAINER ID        IMAGE                  COMMAND                CREATED       
 
 #sudo apt-get install mongodb-clients
 
-mongo --port 49153
+mongo --port 49153 << 'EOF'
+    config = { _id: "rs1", members:[
+              { _id : 0, host : "172.17.0.11:27017" },
+              { _id : 1, host : "172.17.0.12:27017" },
+              { _id : 2, host : "172.17.0.13:27017" }]};
+    rs.initiate(config)
+EOF
 
-# MongoDB shell
-
-rs.initiate()
-rs.add("172.17.0.12:27017")
-rs.add("172.17.0.13:27017")
-rs.status()
-
-# MongoDB shell
-
-cfg = rs.conf()
-cfg.members[0].host = "172.17.0.11:27017"
-rs.reconfig(cfg)
-rs.status()
+mongo --port 49153 << 'EOF'
+    rs.status()
+EOF
 
 #rs1:PRIMARY> rs.status()
 #{
@@ -207,12 +202,24 @@ sudo docker run --name mongos1 -P -d dev24/mongos --configdb 172.17.0.14:27017 -
 #676727c7b9f5        dev24/mongodb:latest   usr/bin/mongod --nop   40 minutes ago      Up 40 minutes       0.0.0.0:49153->27017/tcp   rs1_srv1
 
 
-mongo 172.17.0.15:27017
+mongo 172.17.0.15:27017 << 'EOF'
+    sh.addShard("rs1/172.17.0.11:27017")
+    sh.status()
+EOF
 
-# MongoDB shell
+#--- Sharding Status ---
+#  sharding version: {
+#	"_id" : 1,
+#	"version" : 3,
+#	"minCompatibleVersion" : 3,
+#	"currentVersion" : 4,
+#	"clusterId" : ObjectId("5423113d9da4aed3c48c9ac2")
+#}
+#  shards:
+#	{  "_id" : "rs1",  "host" : "rs1/172.17.0.11:27017,172.17.0.12:27017,172.17.0.13:27017" }
+#  databases:
+#	{  "_id" : "admin",  "partitioned" : false,  "primary" : "config" }
 
-sh.addShard("rs1/172.17.0.11:27017")
-sh.status()
 
 #sudo docker ps -a -q | sudo xargs docker stop | sudo xargs docker rm
 

@@ -1,0 +1,153 @@
+
+Ticket
+
+    In the scenario when we have one mongodb factory used by two mongo templates defined as below:
+
+          <bean id="mongoTemplateReadFromPrimary" class="org.springframework.data.mongodb.core.MongoTemplate">
+              <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+          </bean>
+
+          <bean id="mongoTemplateReadFromSecondary" class="org.springframework.data.mongodb.core.MongoTemplate">
+              <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+              <property name="readPreference" value="SECONDARY" />
+          </bean>
+
+    operations using mongoTemplateReadFromPrimary will be executed also on secondaries.
+
+    This can cause unreliable reads since there is a small delay in the replication process.
+
+    This behaviour comes in contradiction with:
+
+    - MongoDB documentation:
+
+        "By default, an application directs its read operations to the primary member in a replica set.
+        Reading from the primary guarantees that read operations reflect the latest version of a document."
+
+    - behaviour when only one mongoTemplate is used, when all reads go on primary
+
+    - Spring Data MongoDB documentation, where the need to explicitly specify the readPreference is not documented.
+        (at least I was not able to find it)
+
+    Problem is hard to identify when the application is highly concurrent. (concurrency was excluded from test scenarios)
+
+    I attached the project I used for the test scenarios. You can find there both the java code but also the docker files
+    and the code used to create the mongod, mongos and mongo config servers.
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+Test scenario
+
+Input:
+- one mongo:db-factory with one mongoTemplate with no readPreference explicit value.
+- 50 queries executed sequentially.
+
+Results:
+ - all 50 queries are executed on primary server
+
+ - executing command: sudo docker logs rs1_srv1 | grep appDomain returns 50 lines similar to:
+
+   Wed Sep 24 18:14:35.773 [conn28] query database.appDomain query: { $comment: "QUERY_ON_PRIMARY", $query: {} } ntoreturn:0 ntoskip:0 nscanned:0 keyUpdates:0 locks(micros) r:13 nreturned:0 reslen:20 0ms
+
+ - executing command: sudo docker logs rs1_srv1 | grep appDomain | wc -l returns value 50
+
+Note:
+ - this is expected since from MongoDB documentation we have:
+
+   By default, an application directs its read operations to the primary member in a replica set. Reading from the primary guarantees that read operations reflect the latest version of a document.
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+Test scenario
+
+Motivation:
+  - to scale MongoDB for read operations it is decided that some of the read operations can be performed on the secondaries while others more critical remain on the primary
+
+Input:
+  - one mongo:db-factory with two mongoTemplate, code as below
+
+      <bean id="mongoTemplateReadFromPrimary" class="org.springframework.data.mongodb.core.MongoTemplate">
+          <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+      </bean>
+
+      <bean id="mongoTemplateReadFromSecondary" class="org.springframework.data.mongodb.core.MongoTemplate">
+          <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+          <property name="readPreference" value="SECONDARY" />
+      </bean>
+
+  - 50 queries executed sequentially using each of the templates
+
+Results:
+   - executing on primary
+
+     sudo docker logs rs1_srv1 | grep appDomain
+     Wed Sep 24 18:49:53.957 [conn26] query database.appDomain query: { $comment: "QUERY_ON_PRIMARY", $query: {} } ntoreturn:0 ntoskip:0 nscanned:0 keyUpdates:0 locks(micros) W:179 r:20 nreturned:0 reslen:20 0ms
+     sudo docker logs rs1_srv1 | grep appDomain | wc -l
+     1
+
+   - executing on secondary 1
+
+     sudo docker logs rs1_srv2 | grep appDomain
+     Wed Sep 24 18:49:53.960 [conn32] query database.appDomain query: { $comment: "QUERY_ON_SECONDARY", $query: {}, $readPreference: { mode: "secondaryPreferred" } } ntoreturn:0 ntoskip:0 nscanned:0 keyUpdates:0 locks(micros) W:114 r:19 nreturned:0 reslen:20 0ms
+     Wed Sep 24 18:49:53.961 [conn32] query database.appDomain query: { $comment: "QUERY_ON_PRIMARY", $query: {}, $readPreference: { mode: "secondaryPreferred" } } ntoreturn:0 ntoskip:0 nscanned:0 keyUpdates:0 locks(micros) r:16 nreturned:0 reslen:20 0ms
+     ........ //following 97 lines
+
+     sudo docker logs rs1_srv2 | grep appDomain | wc -l
+     99
+
+   - executing on secondary 2
+
+     sudo docker logs rs1_srv3 | grep appDomain | wc -l
+     0
+
+Observation
+
+   - we see that queries which should be executed on primary are instead executed on the secondary server
+
+------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
+
+Test scenario
+Motivation:
+  - the same as above
+
+Input:
+
+  - one mongo:db-factory with two mongoTemplate, code as below, read preference specified explicitly for both templates
+
+    <bean id="mongoTemplateReadFromPrimary" class="org.springframework.data.mongodb.core.MongoTemplate">
+        <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+        <property name="readPreference" value="PRIMARY" />
+     </bean>
+
+    <bean id="mongoTemplateReadFromSecondary" class="org.springframework.data.mongodb.core.MongoTemplate">
+        <constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
+        <property name="readPreference" value="SECONDARY" />
+    </bean>
+
+  - 50 queries executed sequentially using each of the templates
+
+Result:
+
+  - executing on primary
+
+      sudo docker logs rs1_srv1 | grep appDomain
+      Wed Sep 24 19:10:22.963 [conn23] query database.appDomain query: { $comment: "QUERY_ON_PRIMARY", $query: {} } ntoreturn:0 ntoskip:0 nscanned:0 keyUpdates:0 locks(micros) W:124 r:17 nreturned:0 reslen:20 0ms
+      ........
+
+      sudo docker logs rs1_srv1 | grep appDomain | wc -l
+      50
+
+  - executing on secondary 1
+
+      sudo docker logs rs1_srv2 | grep appDomain
+      Wed Sep 24 19:10:22.965 [conn17] query database.appDomain query: { $comment: "QUERY_ON_SECONDARY", $query: {}, $readPreference: { mode: "secondaryPreferred" } } ntoreturn:0 ntoskip:0 nscanned:0 keyUpdates:0 locks(micros) W:96 r:19 nreturned:0 reslen:20 0ms
+
+      sudo docker logs rs1_srv2 | grep appDomain | wc -l
+      50
+
+  - executing on secondary 2
+
+      sudo docker logs rs1_srv3 | grep appDomain | wc -l
+      0

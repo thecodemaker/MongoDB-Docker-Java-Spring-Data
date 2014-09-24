@@ -11,7 +11,7 @@ public class MongoApp {
         ApplicationContext context = new ClassPathXmlApplicationContext("/spring/app-context.xml");
         AppService service = context.getBean("service", AppService.class);
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 50; i++) {
             service.findOnPrimary();
             service.findOnSecondary();
         }
