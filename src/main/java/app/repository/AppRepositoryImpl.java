@@ -8,8 +8,6 @@ import org.springframework.data.mongodb.core.query.Query;
 
 import java.util.List;
 
-import static org.springframework.data.mongodb.core.query.Criteria.where;
-
 public class AppRepositoryImpl implements AppRepositoryCustom<AppDomain> {
 
     @Autowired
@@ -20,13 +18,16 @@ public class AppRepositoryImpl implements AppRepositoryCustom<AppDomain> {
     @Qualifier("mongoTemplateReadFromSecondary")
     private MongoTemplate mongoTemplateReadFromSecondary;
 
+    private static Query QUERY_ON_PRIMARY = new Query().comment("QUERY_ON_PRIMARY");
+    private static Query QUERY_ON_SECONDARY = new Query().comment("QUERY_ON_SECONDARY");
+
     @Override
     public List<AppDomain> findOnPrimary() {
-        return mongoTemplateReadFromPrimary.find(new Query(where("read preference").is("primary")),AppDomain.class);
+        return mongoTemplateReadFromPrimary.find(QUERY_ON_PRIMARY, AppDomain.class);
     }
 
     @Override
     public List<AppDomain> findOnSecondary() {
-        return mongoTemplateReadFromSecondary.find(new Query(where("read preference").is("secondary")),AppDomain.class);
+        return mongoTemplateReadFromSecondary.find(QUERY_ON_SECONDARY, AppDomain.class);
     }
 }
